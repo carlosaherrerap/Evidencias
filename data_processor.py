@@ -113,6 +113,12 @@ class DataProcessor:
             cuenta = cliente_data['cuenta']
             nombre = cliente_data['nombre']
             
+            # Copiar audio IVR (SIEMPRE se copia si el cliente tiene gestión IVR)
+            audio_filename = f"ivr_{nombre}.mp3"
+            audio_path = output_folder / audio_filename
+            shutil.copy2(audio_ivr_path, audio_path)
+            files_created.append(audio_filename)
+            
             # Filtrar en nuevos_datos por CUENTA y GESTION_EFECTIVA = IVR
             ivr_data = nuevos_datos_df[
                 (nuevos_datos_df['cuenta'] == cuenta) & 
@@ -120,23 +126,16 @@ class DataProcessor:
             ].copy()
             
             if ivr_data.empty:
-                self.log(f"  ⚠️ No se encontraron registros IVR para {nombre}")
-                return False, files_created
-            
-            # Agregar columna TIPO DE GESTION
-            ivr_data['TIPO DE GESTION'] = 'IVR'
-            
-            # Crear archivo Excel
-            excel_filename = f"{nombre}_ivr.xlsx"
-            excel_path = output_folder / excel_filename
-            ivr_data.to_excel(excel_path, index=False, engine='openpyxl')
-            files_created.append(excel_filename)
-            
-            # Copiar audio IVR
-            audio_filename = f"ivr_{nombre}.mp3"
-            audio_path = output_folder / audio_filename
-            shutil.copy2(audio_ivr_path, audio_path)
-            files_created.append(audio_filename)
+                self.log(f"  ⚠️ No se encontraron registros IVR en nuevos_datos para {nombre} (audio IVR copiado)")
+            else:
+                # Agregar columna TIPO DE GESTION
+                ivr_data['TIPO DE GESTION'] = 'IVR'
+                
+                # Crear archivo Excel
+                excel_filename = f"{nombre}_ivr.xlsx"
+                excel_path = output_folder / excel_filename
+                ivr_data.to_excel(excel_path, index=False, engine='openpyxl')
+                files_created.append(excel_filename)
             
             return True, files_created
             
