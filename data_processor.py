@@ -177,7 +177,7 @@ class DataProcessor:
             return False, files_created
     
     def create_call_evidence(self, cliente_data: Dict, nuevos_datos_df: pd.DataFrame,
-                            consolidados_df: pd.DataFrame, output_folder: Path) -> Tuple[bool, List[str]]:
+                            consolidados_df: Optional[pd.DataFrame], output_folder: Path) -> Tuple[bool, List[str]]:
         """
         Crea archivos de evidencia CALL para un cliente
         
@@ -199,50 +199,53 @@ class DataProcessor:
             ].copy()
             
             if call_data.empty:
-                self.log(f"  ⚠️ No se encontraron registros CALL para {nombre}")
+                self.log(f"  ⚠️ No se encontraron registros CALL en nuevos_datos para {nombre}")
                 return False, files_created
             
             # Agregar columna TIPO DE GESTION
             call_data['TIPO DE GESTION'] = 'CALL'
             
-            # Crear archivo Excel
+            # Crear archivo Excel (SIEMPRE se crea si hay datos en nuevos_datos)
             excel_filename = f"{nombre}_gestiones.xlsx"
             excel_path = output_folder / excel_filename
             call_data.to_excel(excel_path, index=False, engine='openpyxl')
             files_created.append(excel_filename)
             
-            # Buscar audio en consolidados
-            audio_found = False
-            audio_row = None
-            
-            # Primero intentar buscar por DNI
-            if dni:
-                audio_row = consolidados_df[consolidados_df['dni'].astype(str) == str(dni)]
-                if not audio_row.empty:
-                    audio_found = True
-            
-            # Si no se encontró por DNI, buscar por teléfono
-            if not audio_found and telefono:
-                audio_row = consolidados_df[consolidados_df['telefono'].astype(str) == str(telefono)]
-                if not audio_row.empty:
-                    audio_found = True
-            
-            if audio_found and not audio_row.empty:
-                # Construir ruta del audio
-                ruta = str(audio_row.iloc[0]['ruta'])
-                nombre_completo_audio = str(audio_row.iloc[0]['nombre_completo'])
-                audio_source_path = f"{ruta}/{nombre_completo_audio}.mp3"
+            # Buscar audio en consolidados (OPCIONAL - solo si existe consolidados_df)
+            if consolidados_df is not None:
+                audio_found = False
+                audio_row = None
                 
-                if os.path.exists(audio_source_path):
-                    # Copiar audio
-                    audio_filename = f"{nombre}_{cuenta}.mp3"
-                    audio_dest_path = output_folder / audio_filename
-                    shutil.copy2(audio_source_path, audio_dest_path)
-                    files_created.append(audio_filename)
+                # Primero intentar buscar por DNI
+                if dni:
+                    audio_row = consolidados_df[consolidados_df['dni'].astype(str) == str(dni)]
+                    if not audio_row.empty:
+                        audio_found = True
+                
+                # Si no se encontró por DNI, buscar por teléfono
+                if not audio_found and telefono:
+                    audio_row = consolidados_df[consolidados_df['telefono'].astype(str) == str(telefono)]
+                    if not audio_row.empty:
+                        audio_found = True
+                
+                if audio_found and not audio_row.empty:
+                    # Construir ruta del audio
+                    ruta = str(audio_row.iloc[0]['ruta'])
+                    nombre_completo_audio = str(audio_row.iloc[0]['nombre_completo'])
+                    audio_source_path = f"{ruta}/{nombre_completo_audio}.mp3"
+                    
+                    if os.path.exists(audio_source_path):
+                        # Copiar audio
+                        audio_filename = f"{nombre}_{cuenta}.mp3"
+                        audio_dest_path = output_folder / audio_filename
+                        shutil.copy2(audio_source_path, audio_dest_path)
+                        files_created.append(audio_filename)
+                    else:
+                        self.log(f"  ⚠️ Audio no encontrado en: {audio_source_path}")
                 else:
-                    self.log(f"  ⚠️ Audio no encontrado en: {audio_source_path}")
+                    self.log(f"  ⚠️ No se encontró audio CALL para {nombre} (DNI: {dni}, TEL: {telefono}) - Excel creado")
             else:
-                self.log(f"  ⚠️ No se encontró audio CALL para {nombre} (DNI: {dni}, TEL: {telefono})")
+                self.log(f"  ℹ️ consolidados.xlsx no proporcionado - Solo Excel CALL creado para {nombre}")
             
             return True, files_created
             
@@ -309,8 +312,8 @@ class DataProcessor:
                     files_created_total.extend(files)
                     self.log(f"  ✅ SMS: {', '.join(files)}")
             
-            # Procesar CALL
-            if 'CALL' in gestiones and consolidados_df is not None:
+            # Procesar CALL (consolidados_df es opcional)
+            if 'CALL' in gestiones:
                 success, files = self.create_call_evidence(
                     cliente_data, nuevos_datos_df, consolidados_df, cliente_folder
                 )
