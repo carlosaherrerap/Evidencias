@@ -3,9 +3,12 @@ Módulo de procesamiento de datos para evidencias de cobranzas
 Maneja la sanitización de campos y generación de archivos de evidencias
 """
 import pandas as pd
+import numpy as np
 import os
 import shutil
 from pathlib import Path
+from openpyxl import load_workbook
+from openpyxl.styles import numbers
 from typing import Dict, List, Tuple, Optional
 
 
@@ -43,6 +46,64 @@ class DataProcessor:
         """Envía un mensaje de log a la interfaz"""
         if self.log_callback:
             self.log_callback(message)
+    
+    def save_excel_formatted(self, df: pd.DataFrame, excel_path: Path):
+        """
+        Guarda un DataFrame a Excel con formato de texto para campos numéricos
+        y sin valores NaN (se muestran como celdas vacías)
+        
+        Args:
+            df: DataFrame a guardar
+            excel_path: Ruta donde guardar el archivo Excel
+        """
+        # Crear copia para no modificar el original
+        df_formatted = df.copy()
+        
+        # Reemplazar NaN con cadena vacía
+        df_formatted = df_formatted.fillna('')
+        
+        # Columnas que típicamente contienen números largos
+        numeric_columns = ['cuenta', 'telefono', 'celular', 'dni', 'documento',
+                          'numero_credito', 'CUENTA', 'TELEFONO', 'CELULAR', 'DNI',
+                          'DOCUMENTO', 'NUMERO DE CREDITO', 'numero de credito']
+        
+        # Convertir columnas numéricas a texto para evitar notación científica
+        for col in df_formatted.columns:
+            col_lower = col.lower().strip()
+            # Verificar si es una columna numérica conocida o si contiene valores numéricos largos
+            if col in numeric_columns or col_lower in [c.lower() for c in numeric_columns]:
+                df_formatted[col] = df_formatted[col].apply(
+                    lambda x: str(int(float(x))) if x != '' and pd.notna(x) and str(x).replace('.', '').replace('-', '').isdigit() else (str(x) if x != '' else '')
+                )
+            else:
+                # Para otras columnas, convertir números a string si son muy largos
+                df_formatted[col] = df_formatted[col].apply(
+                    lambda x: str(int(float(x))) if isinstance(x, (int, float)) and not isinstance(x, bool) and pd.notna(x) and len(str(int(float(x)))) > 10 else x
+                )
+        
+        # Guardar el archivo Excel
+        df_formatted.to_excel(excel_path, index=False, engine='openpyxl')
+        
+        # Abrir el archivo y aplicar formato de texto a las columnas numéricas
+        wb = load_workbook(excel_path)
+        ws = wb.active
+        
+        # Obtener índices de columnas numéricas
+        header_row = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))[0]
+        numeric_col_indices = []
+        for idx, col_name in enumerate(header_row, 1):
+            if col_name:
+                col_lower = str(col_name).lower().strip()
+                if col_name in numeric_columns or col_lower in [c.lower() for c in numeric_columns]:
+                    numeric_col_indices.append(idx)
+        
+        # Aplicar formato de texto a las celdas de columnas numéricas
+        for col_idx in numeric_col_indices:
+            for row in range(2, ws.max_row + 1):  # Empezar desde la fila 2 (después del header)
+                cell = ws.cell(row=row, column=col_idx)
+                cell.number_format = numbers.FORMAT_TEXT
+        
+        wb.save(excel_path)
     
     def sanitize_dataframe(self, df: pd.DataFrame, skip_consolidados: bool = False) -> pd.DataFrame:
         """
@@ -131,10 +192,10 @@ class DataProcessor:
                 # Agregar columna TIPO DE GESTION
                 ivr_data['TIPO DE GESTION'] = 'IVR'
                 
-                # Crear archivo Excel
+                # Crear archivo Excel con formato de texto para campos numéricos
                 excel_filename = f"{nombre}_ivr.xlsx"
                 excel_path = output_folder / excel_filename
-                ivr_data.to_excel(excel_path, index=False, engine='openpyxl')
+                self.save_excel_formatted(ivr_data, excel_path)
                 files_created.append(excel_filename)
             
             return True, files_created
@@ -164,10 +225,10 @@ class DataProcessor:
                 self.log(f"  ⚠️ No se encontraron registros SMS para {nombre}")
                 return False, files_created
             
-            # Crear archivo Excel
+            # Crear archivo Excel con formato de texto para campos numéricos
             excel_filename = f"SMS_{nombre}.xlsx"
             excel_path = output_folder / excel_filename
-            sms_data.to_excel(excel_path, index=False, engine='openpyxl')
+            self.save_excel_formatted(sms_data, excel_path)
             files_created.append(excel_filename)
             
             return True, files_created
@@ -205,10 +266,10 @@ class DataProcessor:
             # Agregar columna TIPO DE GESTION
             call_data['TIPO DE GESTION'] = 'CALL'
             
-            # Crear archivo Excel (SIEMPRE se crea si hay datos en nuevos_datos)
+            # Crear archivo Excel con formato de texto para campos numéricos
             excel_filename = f"{nombre}_gestiones.xlsx"
             excel_path = output_folder / excel_filename
-            call_data.to_excel(excel_path, index=False, engine='openpyxl')
+            self.save_excel_formatted(call_data, excel_path)
             files_created.append(excel_filename)
             
             # Buscar audio en consolidados (OPCIONAL - solo si existe consolidados_df)
