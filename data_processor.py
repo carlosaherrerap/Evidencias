@@ -249,7 +249,7 @@ class DataProcessor:
                     transcripcion_source_path = f"{transcripcion_base_path}/{nombre_completo_audio}.txt"
                     
                     if os.path.exists(transcripcion_source_path):
-                        transcripcion_filename = f"{nombre}_{cuenta}_transcripcion.txt"
+                        transcripcion_filename = f"{nombre}_{cuenta}.txt"
                         transcripcion_dest_path = output_folder / transcripcion_filename
                         shutil.copy2(transcripcion_source_path, transcripcion_dest_path)
                         files_created.append(transcripcion_filename)
