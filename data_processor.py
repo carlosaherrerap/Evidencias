@@ -211,7 +211,7 @@ class DataProcessor:
             call_data.to_excel(excel_path, index=False, engine='openpyxl')
             files_created.append(excel_filename)
             
-            # Buscar audio en consolidados (OPCIONAL - solo si existe consolidados_df)
+            # Buscar audio y transcripción en consolidados (OPCIONAL - solo si existe consolidados_df)
             if consolidados_df is not None:
                 audio_found = False
                 audio_row = None
@@ -229,19 +229,32 @@ class DataProcessor:
                         audio_found = True
                 
                 if audio_found and not audio_row.empty:
-                    # Construir ruta del audio
+                    # Obtener nombre_completo para buscar audio y transcripción
                     ruta = str(audio_row.iloc[0]['ruta'])
                     nombre_completo_audio = str(audio_row.iloc[0]['nombre_completo'])
+                    
+                    # 1. Copiar audio MP3
                     audio_source_path = f"{ruta}/{nombre_completo_audio}.mp3"
                     
                     if os.path.exists(audio_source_path):
-                        # Copiar audio
                         audio_filename = f"{nombre}_{cuenta}.mp3"
                         audio_dest_path = output_folder / audio_filename
                         shutil.copy2(audio_source_path, audio_dest_path)
                         files_created.append(audio_filename)
                     else:
                         self.log(f"  ⚠️ Audio no encontrado en: {audio_source_path}")
+                    
+                    # 2. Buscar y copiar archivo de transcripción TXT
+                    transcripcion_base_path = "E:/ProcesoAudios/2025/everyVerse/15-19/evidencias_general"
+                    transcripcion_source_path = f"{transcripcion_base_path}/{nombre_completo_audio}.txt"
+                    
+                    if os.path.exists(transcripcion_source_path):
+                        transcripcion_filename = f"{nombre}_{cuenta}_transcripcion.txt"
+                        transcripcion_dest_path = output_folder / transcripcion_filename
+                        shutil.copy2(transcripcion_source_path, transcripcion_dest_path)
+                        files_created.append(transcripcion_filename)
+                    else:
+                        self.log(f"  ⚠️ Transcripción no encontrada en: {transcripcion_source_path}")
                 else:
                     self.log(f"  ⚠️ No se encontró audio CALL para {nombre} (DNI: {dni}, TEL: {telefono}) - Excel creado")
             else:
